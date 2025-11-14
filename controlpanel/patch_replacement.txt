@@ -1,0 +1,16 @@
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[XTension] Extension loading...');
+
+  // Load main interface directly without license validation
+  try {
+    await loadMainInterface();
+  } catch (error) {
+    console.error('[XTension] Error loading main interface:', error);
+    // Show error state but still try to load minimal interface
+    try {
+      await loadMainInterface();
+    } catch (fallbackError) {
+      console.error('[XTension] Critical error loading interface:', fallbackError);
+    }
+  }
+});

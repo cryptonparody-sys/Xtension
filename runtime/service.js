@@ -1,6 +1,6 @@
-import { TXtensionConfig } from '../core/options.js';
+import { XtensionConfig } from '../core/options.js';
 
-const CONFIG_PROMISE = Promise.resolve(TXtensionConfig);
+const CONFIG_PROMISE = Promise.resolve(XtensionConfig);
 
 const STORAGE_KEY = 'txSettings';
 const DEFAULT_MAX_TOKENS = 400;
@@ -31,7 +31,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       });
     }
   } catch (error) {
-    console.error('[TXtension] onInstalled error', error);
+    console.error('[Xtension] onInstalled error', error);
   }
 });
 
@@ -89,21 +89,20 @@ async function translateTweet({ tweetContent, targetLanguage, toneId }) {
     throw new Error('No provider credentials configured.');
   }
 
-  const tone = config.tonePresets.find((preset) => preset.id === (toneId || settings.tonePreset)) || config.tonePresets[0];
+  const selectedToneId = toneId || settings.tonePreset || 'simple';
+  const tone = config.tonePresets.find((preset) => preset.id === selectedToneId) || config.tonePresets[0];
   const languageCode = targetLanguage || settings.targetLanguage;
   const languageLabel = resolveLanguageLabel(config, languageCode, 'the selected language');
 
   const prompt = [
-    `You are TXtension, an expert translator who always responds in ${languageLabel}.`,
-    `Write entirely in ${languageLabel}; never switch languages or include transliterations from other scripts.`,
-    `Use a smooth, conversational voice even for technical subjects. Keep explanations clear and natural, never stiff or academic.`,
-    'Respect the natural writing direction of the requested language and keep the word order authentic to native speakers.',
-    tone.prompt,
-    `If the tweet already uses ${languageLabel}, rewrite it to match the requested style instead of apologising.`,
-    `Return only the final text with no labels, headings, notes, or commentary. Do not mention that you are translating or summarising.`,
-    tweetContent?.language ? `Detected source language: ${tweetContent.language}` : '',
-    tweetContent?.author ? `Tweet author: ${tweetContent.author}` : '',
-    `Tweet content:\n"""${tweetContent?.text || ''}"""`
+    `You are Xtension, an expert translator specializing in nuanced tone-based translation.`,
+    `${tone.prompt}`,
+    `TASK: Translate the following tweet into ${languageLabel}. If the tweet is already in ${languageLabel}, rewrite it to match the requested tone style exactly.`,
+    `CRITICAL REQUIREMENTS: Write entirely in ${languageLabel} using fluent, natural language. Never switch languages or include transliterations.`,
+    `TRANSLATION STYLE: Translate using colloquial and non-formal language. The output should sound natural and conversational, like how people actually talk, not formal or academic writing.`,
+    `Return ONLY the final translation text with no labels, headings, notes, commentary, or explanations.`,
+    tweetContent?.author ? `Original tweet author: ${tweetContent.author}` : '',
+    `Tweet content to translate:\n"""${tweetContent?.text || ''}"""`
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -137,15 +136,16 @@ async function translateDiscordMessage({ messageContent, targetLanguage, toneId 
   const languageLabel = resolveLanguageLabel(config, languageCode, 'the selected language');
 
   const prompt = [
-    `You are TXtension, an expert translator drafting responses for Discord conversations. Always answer in ${languageLabel}.`,
-    `Write entirely in ${languageLabel}; never switch languages or include transliterations from other scripts.`,
-    `Use a smooth, conversational voice that feels natural in real chat threads—even for technical subjects. Keep terminology accurate but explain tricky ideas plainly.`,
-    'Respect the natural writing direction of the requested language and keep the word order authentic to native speakers.',
-    tone.prompt,
-    messageContent?.language ? `Detected source language: ${messageContent.language}` : '',
-    messageContent?.author ? `Message author: ${messageContent.author}` : '',
-    `Message content:\n"""${messageContent?.text || ''}"""`,
-    `Return only the translated message. Do not add headings, notes, emojis, markdown fences, or commentary.`
+    `You are Xtension, an expert translator specializing in nuanced tone-based translation for Discord conversations.`,
+    `${tone.prompt}`,
+    `TASK: Translate the following Discord message into ${languageLabel}. Maintain conversational flow appropriate for Discord.`,
+    `CRITICAL REQUIREMENTS: Write entirely in ${languageLabel} using fluent, natural language. Never switch languages or include transliterations.`,
+    `TRANSLATION STYLE: Translate using colloquial and non-formal language. The output should sound natural and conversational, like how people actually talk, not formal or academic writing.`,
+    `Use a smooth, conversational voice that feels natural in real chat threads. Keep terminology accurate but explain tricky ideas plainly.`,
+    `Return ONLY the final translation text with no labels, headings, notes, emojis, markdown fences, or commentary.`,
+    messageContent?.language ? `Original message language: ${messageContent.language}` : '',
+    messageContent?.author ? `Original message author: ${messageContent.author}` : '',
+    `Message content to translate:\n"""${messageContent?.text || ''}"""`
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -184,14 +184,14 @@ async function translateReplyDraft({ text, targetLanguage, sourceLanguage, conte
   const sourceHint = (sourceLanguage || '').trim();
 
   const prompt = [
-    `You are TXtension, a conversational translator preparing ${context === 'discord' ? 'Discord' : 'Twitter'} replies.`,
-    `Translate the draft below into ${languageLabel} (${desiredLanguageCode}).`,
-    sourceHint ? `The author likely wrote the draft in ${resolveLanguageLabel(config, sourceHint, sourceHint)}.` : '',
-    'Keep the voice casual, fluid, and natural—avoid stiff, formal, or academic phrasing.',
-    'Do not add ideas, emojis, hashtags, or commentary that do not exist in the draft.',
+    `You are Xtension, a conversational translator preparing ${context === 'discord' ? 'Discord' : 'Twitter'} replies.`,
+    `TASK: Translate the draft reply below into ${languageLabel} (${desiredLanguageCode}). Keep the exact same meaning and intent.`,
+    sourceHint ? `Source language hint: The author likely wrote this in ${resolveLanguageLabel(config, sourceHint, sourceHint)}.` : '',
+    'CRITICAL STYLE: Make the voice casual, fluid, and natural—completely avoid stiff, formal, academic, or bookish phrasing.',
+    'Do not add ideas, emojis, hashtags, or commentary that don\'t exist in the original draft.',
     'Avoid using hyphens, underscores, or decorative separators between words.',
-    'Return only the translated reply text with no labels or surrounding quotes.',
-    `Draft reply:\n"""${trimmed}"""`
+    'Return ONLY the translated reply text with no labels, explanations, or surrounding quotes.',
+    `Original draft to translate:\n"""${trimmed}"""`
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -231,25 +231,26 @@ async function generateReply({ tweetContent }) {
   const maxWords = Number.isFinite(settings.reply?.maxWords) ? Math.max(0, settings.reply.maxWords) : 0;
 
   const prompt = [
-    'You are RXtension, a personalised reply assistant.',
-    'Determine the tweet’s language from the content and write the reply entirely in that language.',
-    'If multiple languages appear, choose the one most prominent in the tweet and stay consistent.',
+    'You are Xtension, a personalized reply assistant with expert language detection skills.',
+    'CRITICAL LANGUAGE DETECTION: Analyze the tweet content carefully to determine the primary language. Write your reply ENTIRELY in that same language.',
+    'If the tweet contains multiple languages, identify the dominant language and use it consistently for your entire reply.',
+    'Language detection rules: Look at the main tweet text, not hashtags or mentions. Trust the actual content language over user profile language.',
     replyContext ? `Project or topic context to respect:
 ${replyContext}` : '',
-    'Follow the custom instructions verbatim:',
+    'Follow the custom instructions exactly:',
     customPrompt,
-    avoidList ? `Never use the following words, phrases, or behaviours: ${avoidList}` : '',
+    avoidList ? `STRICTLY AVOID these words, phrases, or behaviors: ${avoidList}` : '',
     maxWords && minWords
-      ? `Make the reply fall between ${minWords} and ${maxWords} words. Rewrite and condense ideas so the reply stays complete, natural, and fully meaningful without exceeding ${maxWords} words.`
+      ? `Reply length: Write between ${minWords} and ${maxWords} words. Keep it complete, natural, and meaningful without exceeding ${maxWords} words.`
       : maxWords
-        ? `Keep the reply under ${maxWords} words. If needed, summarise and rephrase so the message stays complete, natural, and fully meaningful without exceeding the limit.`
+        ? `Reply length: Keep under ${maxWords} words. Summarize and rephrase to stay complete and meaningful while respecting the limit.`
         : minWords
-          ? `Use at least ${minWords} words while keeping the reply natural and fully meaningful.`
+          ? `Reply length: Use at least ${minWords} words while keeping the reply natural and meaningful.`
           : '',
-    tweetContent?.author ? `Tweet author: ${tweetContent.author}` : '',
+    tweetContent?.author ? `Tweet by: ${tweetContent.author}` : '',
     tweetContent?.authorDisplay ? `Display name: ${tweetContent.authorDisplay}` : '',
-    `Tweet content:\n"""${tweetContent?.text || ''}"""`,
-    'Return a single, ready-to-post reply. Exclude greetings, meta commentary, explanations, or surrounding quotes.'
+    `Tweet to analyze and reply to:\n"""${tweetContent?.text || ''}"""`,
+    'IMPORTANT: Write your reply in the same language as the tweet. Return only the reply text, no explanations.'
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -290,25 +291,26 @@ async function generateDiscordReply({ messageContent }) {
   const context = typeof discordSettings.context === 'string' ? discordSettings.context.trim() : '';
 
   const prompt = [
-    'You are RD, a collaborative Discord co-pilot who drafts concise, natural replies.',
-    'Determine the original message language from its content and write the reply entirely in that language.',
-    'If the message mixes languages, reply in the language that dominates the message. Never switch to a different language or translate unless explicitly asked.',
-    'Keep phrasing conversational and fluent—even for technical topics. Avoid stiff, academic, or overly formal language.',
-    'Do not restate the original message word-for-word. Respond directly to the author with clear, helpful guidance.',
+    'You are RD, a collaborative Discord co-pilot with expert language detection skills.',
+    'CRITICAL LANGUAGE DETECTION: Analyze the Discord message content carefully to determine the primary language. Write your reply ENTIRELY in that same language.',
+    'If the message mixes languages, identify the dominant language and use it consistently. Never switch languages unless explicitly asked.',
+    'Language detection rules: Focus on the main message text, not hashtags or code snippets. Trust the actual content language.',
+    'Keep phrasing conversational and fluent—avoid stiff, academic, or overly formal language.',
+    'Respond directly to the author with helpful guidance, don\'t just restate the original message.',
     context ? `Background context to respect:\n${context}` : '',
     'Custom reply guidance (follow these instructions exactly):',
     customPrompt,
-    avoidList ? `Never use the following words, phrases, or behaviours: ${avoidList}` : '',
+    avoidList ? `STRICTLY AVOID these words, phrases, or behaviors: ${avoidList}` : '',
     maxWordsDiscord && minWordsDiscord
-      ? `Make the reply fall between ${minWordsDiscord} and ${maxWordsDiscord} words. Rewrite and condense ideas so the reply stays complete, natural, and fully meaningful without exceeding ${maxWordsDiscord} words.`
+      ? `Reply length: Write between ${minWordsDiscord} and ${maxWordsDiscord} words. Keep it complete, natural, and meaningful.`
       : maxWordsDiscord
-        ? `Keep the reply under ${maxWordsDiscord} words. If needed, summarise and rephrase so the message stays complete, natural, and fully meaningful without exceeding the limit.`
+        ? `Reply length: Keep under ${maxWordsDiscord} words. Stay complete and meaningful while respecting the limit.`
         : minWordsDiscord
-          ? `Use at least ${minWordsDiscord} words while keeping the reply natural and fully meaningful.`
+          ? `Reply length: Use at least ${minWordsDiscord} words while keeping the reply natural and meaningful.`
           : '',
-    messageContent?.author ? `Message author: ${messageContent.author}` : '',
-    `Incoming message:\n"""${messageContent?.text || ''}"""`,
-    'Return only the reply text. Do not add prefixes, suffixes, summaries, or markdown code fences.'
+    messageContent?.author ? `Message from: ${messageContent.author}` : '',
+    `Discord message to analyze and reply to:\n"""${messageContent?.text || ''}"""`,
+    'IMPORTANT: Write your reply in the same language as the message. Return only the reply text.'
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -338,8 +340,10 @@ async function dispatchToProvider({ providerId, providerSettings, prompt, config
       return callDeepSeek({ providerSettings, prompt, catalog });
     case 'openrouter':
       return callOpenRouter({ providerSettings, prompt, catalog });
-    case 'custom':
-      return callCustom({ providerSettings, prompt });
+    case 'groq':
+      return callGroq({ providerSettings, prompt, catalog });
+    case 'zai':
+      return callZai({ providerSettings, prompt, catalog });
     default:
       throw new Error('Unsupported provider configured.');
   }
@@ -347,7 +351,11 @@ async function dispatchToProvider({ providerId, providerSettings, prompt, config
 
 async function callOpenAI({ providerSettings, prompt, catalog }) {
   const entry = catalog.openai;
-  const baseUrl = (providerSettings.baseUrl || entry.endpoint).replace(/\/$/, '');
+  const model = providerSettings.model || entry.defaultModel;
+  const modelInfo = entry.models[model] || {};
+
+  // Dynamic base URL based on model's endpoint or default provider endpoint
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
   const response = await executeJson(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -368,19 +376,24 @@ async function callOpenAI({ providerSettings, prompt, catalog }) {
 
 async function callAnthropic({ providerSettings, prompt, catalog }) {
   const entry = catalog.anthropic;
-  const baseUrl = (providerSettings.baseUrl || entry.endpoint).replace(/\/$/, '');
+  const model = providerSettings.model || entry.defaultModel;
+  const modelInfo = entry.models[model] || {};
+
+  // Dynamic base URL based on model's endpoint or default provider endpoint
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
   const response = await executeJson(`${baseUrl}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': providerSettings.apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
       model: providerSettings.model || entry.defaultModel,
       max_tokens: providerSettings.maxTokens || DEFAULT_MAX_TOKENS,
       temperature: sanitizeNumber(providerSettings.temperature, 0.2),
-      system: 'You are TXtension, a precise translation assistant.',
+      system: 'You are Xtension, a precise translation assistant.',
       messages: [{ role: 'user', content: prompt }]
     })
   });
@@ -391,30 +404,117 @@ async function callAnthropic({ providerSettings, prompt, catalog }) {
 
 async function callGemini({ providerSettings, prompt, catalog }) {
   const entry = catalog.gemini;
-  const baseUrl = (providerSettings.baseUrl || entry.endpoint).replace(/\/$/, '');
   const model = providerSettings.model || entry.defaultModel;
-  const response = await executeJson(`${baseUrl}/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': providerSettings.apiKey
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: sanitizeNumber(providerSettings.temperature, 0.2),
-        maxOutputTokens: providerSettings.maxOutputTokens || providerSettings.maxTokens || DEFAULT_MAX_TOKENS
+  const modelInfo = entry.models[model] || {};
+
+  // Gemini uses complete endpoint URL from model configuration
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
+  const endpoint = modelInfo.endpoint ? baseUrl : `${baseUrl}/models/${model}:generateContent`;
+
+  try {
+    const response = await executeJson(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': providerSettings.apiKey
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: sanitizeNumber(providerSettings.temperature, 0.2),
+          maxOutputTokens: providerSettings.maxOutputTokens || providerSettings.maxTokens || DEFAULT_MAX_TOKENS,
+          candidateCount: 1
+        },
+        safetySettings: [
+          {
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_NONE"
+          },
+          {
+            "category": "HARM_CATEGORY_HATE_SPEECH",
+            "threshold": "BLOCK_NONE"
+          },
+          {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_NONE"
+          },
+          {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_NONE"
+          }
+        ]
+      })
+    });
+
+    const content = response?.candidates?.[0]?.content?.parts?.map((part) => part.text).join('');
+    if (!content) {
+      // If response is blocked, try with a simpler prompt
+      const fallbackResponse = await executeJson(`${baseUrl}/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': providerSettings.apiKey
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Translate this text: ${prompt}` }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 100,
+            candidateCount: 1
+          }
+        })
+      });
+
+      const fallbackContent = fallbackResponse?.candidates?.[0]?.content?.parts?.map((part) => part.text).join('');
+      if (!fallbackContent) {
+        throw new Error('Gemini content was blocked or returned empty response.');
       }
-    })
-  });
-  const content = response?.candidates?.[0]?.content?.parts?.map((part) => part.text).join('');
-  if (!content) throw new Error('Gemini returned an empty response.');
-  return content;
+      return fallbackContent;
+    }
+    return content;
+  } catch (error) {
+    if (error.message.includes('not found') || error.message.includes('404')) {
+      // Try alternative API version if model not found
+      const altVersion = apiVersion === 'v1beta' ? 'v1' : 'v1beta';
+      const altBaseUrl = `https://generativelanguage.googleapis.com/${altVersion}`;
+
+      try {
+        const altResponse = await executeJson(`${altBaseUrl}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': providerSettings.apiKey
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: sanitizeNumber(providerSettings.temperature, 0.2),
+              maxOutputTokens: providerSettings.maxOutputTokens || providerSettings.maxTokens || DEFAULT_MAX_TOKENS
+            }
+          })
+        });
+
+        const altContent = altResponse?.candidates?.[0]?.content?.parts?.map((part) => part.text).join('');
+        if (altContent) {
+          return altContent;
+        }
+      } catch (altError) {
+        // Alternative API version also failed
+      }
+
+      throw new Error(`Gemini model "${model}" not found in ${apiVersion} or ${altVersion}. Please check the model name and API version.`);
+    }
+    throw error;
+  }
 }
 
 async function callDeepSeek({ providerSettings, prompt, catalog }) {
   const entry = catalog.deepseek;
-  const baseUrl = (providerSettings.baseUrl || entry.endpoint).replace(/\/$/, '');
+  const model = providerSettings.model || entry.defaultModel;
+  const modelInfo = entry.models[model] || {};
+
+  // Dynamic base URL based on model's endpoint or default provider endpoint
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
   const response = await executeJson(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -435,7 +535,11 @@ async function callDeepSeek({ providerSettings, prompt, catalog }) {
 
 async function callOpenRouter({ providerSettings, prompt, catalog }) {
   const entry = catalog.openrouter;
-  const baseUrl = (providerSettings.baseUrl || entry.endpoint).replace(/\/$/, '');
+  const model = providerSettings.model || entry.defaultModel;
+  const modelInfo = entry.models[model] || {};
+
+  // Dynamic base URL based on model's endpoint or default provider endpoint
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
   const response = await executeJson(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -454,47 +558,64 @@ async function callOpenRouter({ providerSettings, prompt, catalog }) {
   return content;
 }
 
-async function callCustom({ providerSettings, prompt }) {
-  if (!providerSettings.baseUrl || !providerSettings.model) {
-    throw new Error('Custom provider requires base URL and model.');
-  }
 
+async function callZai({ providerSettings, prompt, catalog }) {
+  const entry = catalog.zai;
+  const model = providerSettings.model || entry.defaultModel;
+  const modelInfo = entry.models[model] || {};
+
+  // Dynamic base URL based on model-specific endpoint
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
+  const authHeader = entry.authHeader || 'x-api-key';
   const headers = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${providerSettings.apiKey}`
+    [authHeader]: providerSettings.apiKey,
+    'anthropic-version': '2023-06-01'
   };
 
-  if (providerSettings.extraHeaders) {
-    try {
-      Object.assign(headers, JSON.parse(providerSettings.extraHeaders));
-    } catch (error) {
-      console.warn('[TXtension] Invalid custom headers JSON', error);
-    }
-  }
-
-  const response = await executeJson(providerSettings.baseUrl, {
+  const response = await executeJson(`${baseUrl}/messages`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: providerSettings.model,
+      model: model,
+      max_tokens: providerSettings.maxTokens || 220,
+      temperature: sanitizeNumber(providerSettings.temperature, 0.7),
+      system: 'You are Xtension, a precise translation assistant.',
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  const content = response?.content?.[0]?.text;
+  if (!content) throw new Error('Z.ai returned an empty response.');
+  return content;
+}
+
+async function callGroq({ providerSettings, prompt, catalog }) {
+  const entry = catalog.groq;
+  const model = providerSettings.model || entry.defaultModel;
+  const modelInfo = entry.models[model] || {};
+
+  // Dynamic base URL based on model's endpoint or default provider endpoint
+  const baseUrl = (providerSettings.baseUrl || modelInfo.endpoint || entry.endpoint).replace(/\/$/, '');
+  const response = await executeJson(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${providerSettings.apiKey}`
+    },
+    body: JSON.stringify({
+      model: model,
       messages: [{ role: 'user', content: prompt }],
       temperature: sanitizeNumber(providerSettings.temperature, 0.2),
       max_tokens: providerSettings.maxTokens || DEFAULT_MAX_TOKENS
     })
   });
-
-  const content =
-    response?.choices?.[0]?.message?.content ??
-    response?.output ??
-    response?.response ??
-    null;
-
-  if (!content) {
-    throw new Error('Custom provider returned an empty response.');
-  }
-
+  const content = response?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Groq returned an empty response.');
   return content;
 }
+
+
 
 async function executeJson(url, options) {
   const controller = new AbortController();
@@ -534,7 +655,7 @@ async function readSettings() {
     const { [STORAGE_KEY]: settings } = await chrome.storage.local.get([STORAGE_KEY]);
     return { rawSettings: settings || {} };
   } catch (error) {
-    console.warn('[TXtension] Failed to read settings, using defaults', error);
+    console.warn('[Xtension] Failed to read settings, using defaults', error);
     return { rawSettings: {} };
   }
 }
@@ -589,3 +710,4 @@ function stopKeepAlive() {
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+

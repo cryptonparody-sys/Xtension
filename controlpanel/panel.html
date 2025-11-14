@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TXtension Control Panel</title>
+    <title>Xtension Control Panel</title>
     <link rel="stylesheet" href="panel.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,30 +16,47 @@
     <div class="tx-shell">
       <header class="tx-header">
         <div class="tx-brand">
-          <div class="tx-avatar">TX</div>
+          <div class="tx-avatar">XT</div>
           <div>
-            <h1>TXtension</h1>
-            <p>Live translations and fluent replies for Twitter & Discord.</p>
-          </div>
+            <h1>Xtension</h1>
+            <p>Your Best X/Discord Companion</p>
+                      </div>
         </div>
         <div class="tx-provider-summary">
           <span id="providerLabel">Provider: —</span>
           <span id="modelLabel">Model: —</span>
+          <label class="tx-theme-toggle">
+            <input type="checkbox" id="themeToggle">
+            <span class="tx-theme-toggle-slider"></span>
+            <span class="tx-theme-icon">🌙</span>
+          </label>
         </div>
       </header>
 
       <nav class="tx-tabs" role="tablist">
-        <button class="tx-tab active" data-tab="workspace" role="tab" aria-selected="true">Workspace</button>
-        <button class="tx-tab" data-tab="reply" role="tab" aria-selected="false">Reply</button>
+        <!-- Core Features -->
+        <button class="tx-tab active" data-tab="tones" role="tab" aria-selected="true">Translation</button>
+        <button class="tx-tab" data-tab="reply" role="tab" aria-selected="false">X Reply</button>
         <button class="tx-tab" data-tab="discord" role="tab" aria-selected="false">Discord Reply</button>
-        <button class="tx-tab" data-tab="tones" role="tab" aria-selected="false">Tone Studio</button>
-        <button class="tx-tab" data-tab="integrations" role="tab" aria-selected="false">Integrations</button>
-        <button class="tx-tab" data-tab="overview" role="tab" aria-selected="false">Overview</button>
-      </nav>
+        
+        <!-- Configuration -->
+        <button class="tx-tab" data-tab="integrations" role="tab" aria-selected="false">⚙️ Integrations</button>
+        <button class="tx-tab" data-tab="workspace" role="tab" aria-selected="false">🎨 Appearances</button>
+
+        <!-- Info & Future -->
+        <button class="tx-tab" data-tab="overview" role="tab" aria-selected="false">📖 Overview</button>
+              </nav>
 
       <main class="tx-panels">
-        <section id="workspace" class="tx-panel active" role="tabpanel">
-          <form id="workspaceForm" class="tx-form">
+        <section id="tones" class="tx-panel active" role="tabpanel">
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>AI Translation</h2>
+              <p>Click TX chip under X posts or TD button on Discord to translate using AI with custom tones and 10+ languages.</p>
+            </div>
+            <div id="toneList" class="tx-tone-list"></div>
+          </div>
+          <form id="translationDefaultsForm" class="tx-form">
             <div class="tx-card">
               <div class="tx-card-header">
                 <h2>Translation defaults</h2>
@@ -52,7 +69,7 @@
               <label class="tx-switch">
                 <input type="checkbox" id="pinWindow" />
                 <span class="tx-switch-slider"></span>
-                <span class="tx-switch-text">Pin popup mode (fade after 10 seconds)</span>
+                <span class="tx-switch-text">Keep popups open (OFF: 10s auto-close)</span>
               </label>
               <label class="tx-switch">
                 <input type="checkbox" id="autoCopy" />
@@ -60,17 +77,55 @@
                 <span class="tx-switch-text">Copy translations to clipboard automatically</span>
               </label>
             </div>
+            <div class="tx-actions">
+              <button type="submit" class="tx-primary-btn">Save translation defaults</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="integrations" class="tx-panel" role="tabpanel">
+          <div class="tx-card">
+            <div class="tx-card-header split">
+              <div>
+                <h2>AI Provider Setup</h2>
+                <p>Configure AI service (OpenAI, Claude, Gemini, etc.) to power translations and replies.</p>
+              </div>
+              <select id="providerSelect"></select>
+            </div>
+          </div>
+
+          <div id="providerForms" class="tx-provider-forms"></div>
+
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>Save integration</h2>
+              <p>Applies the configuration above.</p>
+            </div>
+            <div class="tx-actions">
+              <button id="saveProviders" class="tx-primary-btn">Save provider settings</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="workspace" class="tx-panel" role="tabpanel">
+          <form id="workspaceForm" class="tx-form">
             <div class="tx-card">
               <div class="tx-card-header">
-                <h2>Popup appearance</h2>
-                <p>Pick the theme for the translator and reply popup.</p>
+                <h2>Theme & Appearance</h2>
+                <p>Customize popup themes, colors, and visual style for translations and replies.</p>
               </div>
-              <div class="tx-appearance" id="appearancePanel">
-                <div id="themeOptions" class="tx-appearance-list" role="listbox"></div>
+              <div class="tx-field">
+                <label class="tx-label">Theme</label>
+                <select id="popupThemeSelect" class="tx-theme-select">
+                  <option value="obsidian" selected>Obsidian Theme</option>
+                  <option value="dark">Dark Theme</option>
+                  <option value="light">Light Theme</option>
+                </select>
+                <p class="tx-field-hint">Choose the visual style for translation and reply popups</p>
               </div>
             </div>
             <div class="tx-actions">
-              <button type="submit" class="tx-primary-btn">Save defaults</button>
+              <button type="submit" class="tx-primary-btn">Save theme settings</button>
             </div>
           </form>
         </section>
@@ -79,20 +134,20 @@
           <form id="replyForm" class="tx-form">
             <div class="tx-card">
               <div class="tx-card-header">
-                <h2>Reply draft</h2>
-                <p>RX uses this prompt whenever it generates a reply popup.</p>
+                <h2>X Reply Assistant</h2>
+                <p>Generate AI-powered replies for X posts with custom prompts and knowledge base.</p>
               </div>
               <label class="tx-field">
-                <span class="tx-label">Custom prompt</span>
+                <span class="tx-label">Personal Prompt</span>
                 <textarea id="replyPrompt" rows="6" placeholder="Describe how RX should craft replies."></textarea>
               </label>
               <label class="tx-field">
-                <span class="tx-label">Project context</span>
-                <textarea id="replyContext" rows="3" placeholder="Share background or project notes RX should remember."></textarea>
+                <span class="tx-label">Library</span>
+                <textarea id="replyContext" rows="3" placeholder="Add background knowledge and context that the AI should remember. This helps the AI respond better when the conversation relates to these topics. If unrelated, it won't cause issues."></textarea>
               </label>
               <label class="tx-field">
                 <span class="tx-label">Avoid list</span>
-                <textarea id="replyAvoid" rows="3" placeholder="Words, topics, or behaviours RX must avoid. Separate items with commas."></textarea>
+                <textarea id="replyAvoid" rows="3" placeholder="Words, phrases, patterns, or instructions the AI must NEVER use in output. Examples: 'enhance' (avoids exact word), 'don't use _ - between words' (avoids underscores and hyphens), 'never say hello' (avoids greeting)."></textarea>
               </label>
               <div class="tx-dual-field">
                 <label class="tx-field">
@@ -120,20 +175,20 @@
           <form id="discordForm" class="tx-form">
             <div class="tx-card">
               <div class="tx-card-header">
-                <h2>Discord Studio</h2>
-                <p>RD replies with your saved guidance while TD translations follow Workspace language and tone defaults.</p>
+                <h2>Discord Reply Assistant</h2>
+                <p>Generate AI-powered replies for Discord messages with separate prompts from X Reply.</p>
               </div>
               <label class="tx-field">
-                <span class="tx-label">Project context</span>
-                <textarea id="discordReplyContext" rows="4" placeholder="Share background context or project notes to guide RD."></textarea>
-              </label>
-              <label class="tx-field">
-                <span class="tx-label">Reply prompt</span>
+                <span class="tx-label">Personal Prompt</span>
                 <textarea id="discordReplyPrompt" rows="6" placeholder="Describe how RD should craft replies on Discord."></textarea>
               </label>
               <label class="tx-field">
+                <span class="tx-label">Library</span>
+                <textarea id="discordReplyContext" rows="4" placeholder="Add background knowledge and context that the AI should remember. This helps the AI respond better when the conversation relates to these topics. If unrelated, it won't cause issues."></textarea>
+              </label>
+              <label class="tx-field">
                 <span class="tx-label">Avoid list</span>
-                <textarea id="discordReplyAvoid" rows="3" placeholder="Words, topics, or behaviours RD must avoid. Separate items with commas."></textarea>
+                <textarea id="discordReplyAvoid" rows="3" placeholder="Words, phrases, patterns, or instructions the AI must NEVER use in output. Examples: 'enhance' (avoids exact word), 'don't use _ - between words' (avoids underscores and hyphens), 'never say hello' (avoids greeting)."></textarea>
               </label>
               <div class="tx-dual-field">
                 <label class="tx-field">
@@ -157,68 +212,106 @@
           </form>
         </section>
 
-        <section id="tones" class="tx-panel" role="tabpanel">
-          <div class="tx-card">
-            <div class="tx-card-header">
-              <h2>Tone Studio</h2>
-              <p>Choose how each translation should sound.</p>
-            </div>
-            <div id="toneList" class="tx-tone-list"></div>
-          </div>
-        </section>
-
-        <section id="integrations" class="tx-panel" role="tabpanel">
-          <div class="tx-card">
-            <div class="tx-card-header split">
-              <div>
-                <h2>Provider</h2>
-                <p>Select the API you use for translations.</p>
-              </div>
-              <select id="providerSelect"></select>
-            </div>
-          </div>
-
-          <div id="providerForms" class="tx-provider-forms"></div>
-
-          <div class="tx-card">
-            <div class="tx-card-header">
-              <h2>Save integration</h2>
-              <p>Applies the configuration above.</p>
-            </div>
-            <div class="tx-actions">
-              <button id="saveProviders" class="tx-primary-btn">Save provider settings</button>
-            </div>
-          </div>
-        </section>
-
+  
+        
         <section id="overview" class="tx-panel" role="tabpanel">
           <div class="tx-card">
             <div class="tx-card-header">
-              <h2>TXtension at a glance</h2>
-              <p>Reply-ready translations in your language, styled the way you like them.</p>
+              <h2>Complete Guide to Xtension</h2>
+              <p>Your AI-powered companion for X and Discord - translations, replies, and automation.</p>
+            </div>
+          </div>
+
+          
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>🔧 Quick Setup</h2>
+              <p>Get started in 3 simple steps</p>
             </div>
             <ul class="tx-list">
-              <li>Click the TX chip under any tweet to open the inline translator.</li>
-              <li>Switch tones and languages instantly from the control panel.</li>
-              <li>Keep everything on-device—your API keys stay in local storage.</li>
+              <li><strong>1. Configure AI Provider:</strong> Go to ⚙️ Integrations → Select OpenAI, Claude, Gemini, etc. → Add API key</li>
+              <li><strong>2. Set Up Your Prompts:</strong> Configure custom prompts for X Reply and Discord Reply → Add knowledge base topics → Set word limits</li>
+              <li><strong>3. Choose Your Style:</strong> Set language preferences and translation tones in AI Translation</li>
+              <li><strong>Start Using:</strong> Visit X or Discord and use the features instantly</li>
             </ul>
           </div>
 
           <div class="tx-card">
             <div class="tx-card-header">
-              <h2>Project notes</h2>
-              <p>TXtension ships without baked-in support links. Fork it, adapt it, and share improvements with your own team.</p>
+              <h2>📖 Core Features</h2>
+              <p>What Xtension can do for you</p>
+            </div>
+            <div class="tx-feature-grid">
+              <div class="tx-feature-item">
+                <h4>🔄 AI Translation</h4>
+                <p><strong>X:</strong> Click TX chip under any post<br>
+                <strong>Discord:</strong> Click TD button on messages<br>
+                <strong>10+ languages</strong> with custom tones</p>
+              </div>
+              <div class="tx-feature-item">
+                <h4>💬 Smart Replies</h4>
+                <p><strong>X Reply:</strong> Generate contextual replies for posts<br>
+                <strong>Discord Reply:</strong> AI-powered message responses<br>
+                <strong>Custom prompts</strong> and knowledge base</p>
+              </div>
+                          </div>
+          </div>
+
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>⚙️ Configuration</h2>
+              <p>Customize your experience</p>
             </div>
             <ul class="tx-list">
-              <li>GitHub: <a class="tx-link" href="https://github.com/cryptonparody-sys" target="_blank" rel="noopener noreferrer">cryptonparody-sys</a></li>
-              <li>Telegram: <a class="tx-link" href="https://t.me/itscryptools" target="_blank" rel="noopener noreferrer">@itscryptools</a></li>
-              <li>Email: <a class="tx-link" href="mailto:cryptonparody@gmail.com">cryptonparody@gmail.com</a></li>
+              <li><strong>AI Providers:</strong> OpenAI, Claude, Gemini, Groq, DeepSeek, and more</li>
+              <li><strong>Themes:</strong> Dark, Light, Obsidian for popups and interface</li>
+              <li><strong>Tones:</strong> Simple, Professional, Detailed, Brief translation styles</li>
+              <li><strong>Languages:</strong> English, Spanish, French, German, Chinese, Arabic, Persian, and more</li>
+            </ul>
+          </div>
+
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>🔒 Privacy & Security</h2>
+              <p>Your data stays safe</p>
+            </div>
+            <ul class="tx-list">
+              <li>All API keys stored locally in your browser only</li>
+              <li>No data sent to external servers except AI APIs you configure</li>
+              <li>Works entirely on-device for maximum privacy</li>
+              <li>Open source code available for transparency</li>
+            </ul>
+          </div>
+
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>💡 Pro Tips</h2>
+              <p>Get the most out of Xtension</p>
+            </div>
+            <ul class="tx-list">
+              <li>Use <strong>Knowledge Base</strong> in X Reply to add context about topics you frequently discuss</li>
+              <li>Set up <strong>Avoid Lists</strong> to prevent certain words in generated replies</li>
+              <li>Configure <strong>word limits</strong> to control reply length</li>
+              <li>Use <strong>Auto-copy</strong> to quickly copy generated translations and replies</li>
+                          </ul>
+          </div>
+
+          <div class="tx-card">
+            <div class="tx-card-header">
+              <h2>📞 Support</h2>
+              <p>Contact us for help and support</p>
+            </div>
+            <ul class="tx-list">
+              <li>💬 <strong>Telegram:</strong> <a class="tx-link" href="https://t.me/itscryptools" target="_blank" rel="noopener noreferrer">@itscryptools</a> - Support & assistance</li>
+              <li>📧 <strong>Email:</strong> <a class="tx-link" href="mailto:cryptonparody@gmail.com">cryptonparody@gmail.com</a> - Direct support</li>
             </ul>
           </div>
         </section>
+
+        
       </main>
 
-      <footer class="tx-footer">TXtension · crafted by <a class="tx-link" href="https://github.com/cryptonparody-sys" target="_blank" rel="noopener noreferrer">cryptonparody-sys</a></footer>
+      <footer class="tx-footer">Xtension · crafted by <a class="tx-link" href="https://github.com/cryptonparody-sys" target="_blank" rel="noopener noreferrer">cryptonparody-sys</a></footer>
     </div>
 
     <template id="toneTemplate">
@@ -234,27 +327,31 @@
           <h3 class="tx-provider-title"></h3>
           <p class="tx-provider-description"></p>
         </div>
-        <div class="tx-grid">
-          <label class="tx-field">
-            <span class="tx-label">API key</span>
-            <input type="password" data-field="apiKey" autocomplete="off" />
+        <div class="tx-provider-form">
+          <label class="tx-field tx-field-large">
+            <span class="tx-label">API Key</span>
+            <input type="password" data-field="apiKey" autocomplete="off" placeholder="Enter your API key..." />
           </label>
-          <label class="tx-field">
+          <label class="tx-field tx-field-large">
             <span class="tx-label">Model</span>
-            <input type="text" data-field="model" />
+            <select class="tx-model-dropdown tx-select-large" data-field="model">
+              <option value="">Loading models...</option>
+            </select>
           </label>
-          <label class="tx-field">
+          <label class="tx-field tx-field-large">
             <span class="tx-label">Base URL</span>
-            <input type="text" data-field="baseUrl" placeholder="https://…" />
+            <input type="text" data-field="baseUrl" placeholder="https://api.example.com" />
           </label>
-          <label class="tx-field">
-            <span class="tx-label">Temperature</span>
-            <input type="number" step="0.1" min="0" max="1" data-field="temperature" />
-          </label>
-          <label class="tx-field">
-            <span class="tx-label">Max tokens</span>
-            <input type="number" min="64" max="4096" data-field="maxTokens" />
-          </label>
+          <div class="tx-dual-field">
+            <label class="tx-field tx-field-large">
+              <span class="tx-label">Temperature</span>
+              <input type="number" step="0.1" min="0" max="1" data-field="temperature" placeholder="0.7" />
+            </label>
+            <label class="tx-field tx-field-large">
+              <span class="tx-label">Max Tokens</span>
+              <input type="number" min="64" max="4096" data-field="maxTokens" placeholder="400" />
+            </label>
+          </div>
         </div>
         <div class="tx-extra"></div>
       </form>

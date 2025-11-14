@@ -1,14 +1,15 @@
 {
     "manifest_version": 3,
-    "name": "TXtension",
+    "name": "Xtension",
     "version": "1.0.0",
-    "description": "Translate any tweet instantly with premium AI models like GPT-4.1, Claude, Gemini, DeepSeek, and more.",
+    "description": "Your X/Discord Companion - AI-powered replies, translations, and smart automation for X (Twitter) and Discord",
     "permissions": [
         "storage",
         "activeTab",
         "contextMenus",
         "alarms",
-        "tabs"
+        "tabs",
+        "scripting"
     ],
     "host_permissions": [
         "https://twitter.com/*",
@@ -19,6 +20,8 @@
         "https://api.openai.com/*",
         "https://api.deepseek.com/*",
         "https://api.anthropic.com/*",
+        "https://api.groq.com/*",
+        "https://api.z.ai/*",
         "https://discord.com/*"
     ],
     "background": {
@@ -39,7 +42,7 @@
         }
     ],
     "action": {
-        "default_title": "TXtension Control Panel",
+        "default_title": "Xtension Control Panel",
         "default_popup": "controlpanel/panel.html",
         "default_icon": {
             "16": "icons/images.png",

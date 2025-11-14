@@ -5,14 +5,14 @@
 
   let configResponse;
   try {
-    configResponse = await chrome.runtime.sendMessage({ type: 'getTxConfig' });
+    configResponse = await safeRuntimeSendMessage({ type: 'getTxConfig' });
   } catch (error) {
-    console.error('[TXtension] Failed to request config', error);
+    console.error('[Xtension] Failed to request config', error);
     return;
   }
 
   if (!configResponse?.success || !configResponse.config) {
-    console.error('[TXtension] Config unavailable', configResponse?.error);
+    console.error('[Xtension] Config unavailable', configResponse?.error);
     return;
   }
 
@@ -22,7 +22,7 @@
 
   if (/discord\.com$/i.test(host)) {
     const discordController = new DiscordReplyController(config, storageKey);
-    discordController.init().catch((error) => console.error('[TXtension] discord init failed', error));
+    discordController.init().catch((error) => console.error('[Xtension] discord init failed', error));
     return;
   }
 
@@ -31,8 +31,32 @@
   }
 
   const controller = new TXTimelineController(config, storageKey);
-  controller.init().catch((error) => console.error('[TXtension] init failed', error));
+  controller.init().catch((error) => console.error('[Xtension] init failed', error));
 })();
+
+// Safe wrapper for chrome.runtime.sendMessage with context validation
+async function safeRuntimeSendMessage(message, retries = 2) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      if (!chrome.runtime?.id) {
+        throw new Error('Extension context invalidated - chrome.runtime.id is undefined');
+      }
+      const response = await chrome.runtime.sendMessage(message);
+      return response;
+    } catch (error) {
+      if (error.message?.includes('Extension context invalidated') || error.message?.includes('context invalidated')) {
+        console.warn(`[Xtension] Extension context invalidated (attempt ${i + 1}/${retries})`, error);
+        if (i === retries - 1) {
+          throw new Error('Extension reloaded or updated. Please refresh the page to continue.');
+        }
+        // Wait a bit before retry
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        throw error;
+      }
+    }
+  }
+}
 
 class TXTimelineController {
   constructor(config, storageKey) {
@@ -67,7 +91,7 @@ class TXTimelineController {
         this.settings = deepMerge(clone(this.config.defaultSettings), saved);
       }
     } catch (error) {
-      console.warn('[TXtension] Failed to load settings, using defaults', error);
+      console.warn('[Xtension] Failed to load settings, using defaults', error);
       this.settings = clone(this.config.defaultSettings);
     }
   }
@@ -127,27 +151,41 @@ class TXTimelineController {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
+        min-width: 52px;
+        height: 32px;
+        padding: 0 18px;
+        border: 1px solid var(--tx-outline);
         border-radius: 999px;
-        border: none;
-        background: transparent;
-        color: #e2e8ff;
+        background:
+          linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(74, 144, 255, 0.15) 50%, rgba(16, 214, 255, 0.08) 100%),
+          linear-gradient(145deg, rgba(20, 30, 50, 0.98) 0%, rgba(15, 25, 40, 0.92) 100%);
+        color: var(--tx-text);
         font-family: ${this.config.theme.fontStack};
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
         cursor: pointer;
-        transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+        transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        position: relative;
+        box-shadow:
+          0 16px 32px rgba(4, 8, 18, 0.4),
+          0 4px 8px rgba(99, 102, 241, 0.15),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(4px);
       }
       .tx-trigger:hover {
-        background: rgba(255, 255, 255, 0.09);
-        color: #ffffff;
-        transform: translateY(-1px);
+        transform: translateY(-2px) scale(1.05);
+        border-color: var(--tx-popup-accent-color, #4b5563);
+        box-shadow:
+          0 20px 40px rgba(5, 11, 24, 0.5),
+          0 8px 16px rgba(99, 102, 241, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.15),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.2);
       }
       .tx-trigger:focus-visible {
-        outline: 2px solid rgba(29, 211, 248, 0.6);
+        outline: 2px solid var(--tx-popup-accent-color, #4b5563);
         outline-offset: 2px;
       }
       .tx-trigger.tx-loading {
@@ -796,7 +834,7 @@ class TXTimelineController {
 
       let contentResponse;
       if (isReply) {
-        contentResponse = await chrome.runtime.sendMessage({
+        contentResponse = await safeRuntimeSendMessage({
           type: 'generateReply',
           tweetContent
         });
@@ -804,7 +842,7 @@ class TXTimelineController {
           throw new Error(contentResponse?.error || 'Reply unavailable.');
         }
       } else {
-        contentResponse = await chrome.runtime.sendMessage({
+        contentResponse = await safeRuntimeSendMessage({
           type: 'translateTweet',
           tweetContent,
           targetLanguage: languageCode,
@@ -842,12 +880,12 @@ class TXTimelineController {
           await navigator.clipboard.writeText(cleanedContent);
           this.toast(modeLabel, 'Copied to clipboard.');
         } catch (copyError) {
-          console.warn('[TXtension] Clipboard copy failed', copyError);
+          console.warn('[Xtension] Clipboard copy failed', copyError);
           this.toast(modeLabel, 'Clipboard unavailable — check permissions.');
         }
       }
     } catch (error) {
-      console.error(`[TXtension] ${mode === 'reply' ? 'Reply' : 'Translation'} failed`, error);
+      console.error(`[Xtension] ${mode === 'reply' ? 'Reply' : 'Translation'} failed`, error);
       this.toast(modeLabel, error.message || (mode === 'reply' ? 'Unable to generate a reply right now.' : 'Unable to translate this tweet right now.'));
       this.setButtonState(button, 'error');
       this.scheduleButtonReset(button);
@@ -855,8 +893,11 @@ class TXTimelineController {
   }
 
   buildOverlay({ mode, article, button, content, languageCode, toneId, tweetLanguage }) {
+    // Check if this is a reply generation (compact popup) or translation (large overlay)
+    const isReply = mode === 'reply';
+
     const wrapper = document.createElement('div');
-    wrapper.className = 'tx-overlay';
+    wrapper.className = isReply ? 'tx-compact-popup' : 'tx-overlay';
     wrapper.dataset.txtensionOverlay = 'true';
 
     const theme = this.resolvePopupTheme();
@@ -867,43 +908,151 @@ class TXTimelineController {
       wrapper.style.setProperty('--tx-popup-text', theme.text);
       wrapper.style.setProperty('--tx-popup-subtext', theme.subtext);
       wrapper.style.setProperty('--tx-popup-shadow', theme.shadow);
+      wrapper.style.setProperty('--tx-popup-backdrop', theme.backdrop || 'blur(20px)');
+      wrapper.style.setProperty('--tx-popup-glow', theme.glow || 'transparent');
+      // Enhanced theme properties
+      // Special case: use sky blue header for light theme
+      if (theme.id === 'light') {
+        wrapper.style.setProperty('--tx-popup-header-bg', 'linear-gradient(135deg, #87CEEB 0%, #B0E0E6 50%, #87CEFA 100%)');
+      } else {
+        wrapper.style.setProperty('--tx-popup-header-bg', theme.headerBg || theme.background);
+      }
+      wrapper.style.setProperty('--tx-popup-accent-color', theme.accentColor || '#3b82f6');
+      wrapper.style.setProperty('--tx-popup-focus-glow', theme.focusGlow || '0 0 0 3px rgba(59, 130, 246, 0.2)');
+      wrapper.style.setProperty('--tx-popup-button-bg', '#7c3aed');
+      wrapper.style.setProperty('--tx-popup-button-hover', '#6d28d9');
     }
     if (fontStack) {
       wrapper.style.setProperty('--tx-popup-font', fontStack);
     }
 
     const card = document.createElement('div');
-    card.className = 'tx-overlay-card';
+    card.className = isReply ? 'tx-compact-card' : 'tx-overlay-card';
 
-    const header = document.createElement('div');
-    header.className = 'tx-overlay-header';
+    // Declare variables in broader scope to be accessible later
+    let dragHandle, resizeHandle;
+
+    let header;
+    if (isReply) {
+      // Compact header for reply generation
+      header = document.createElement('div');
+      header.className = 'tx-compact-header';
+
+      // Add close button for compact popup
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'tx-compact-close';
+      closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', () => this.dismissOverlay(article));
+      header.appendChild(closeBtn);
+    } else {
+      // Large header for translation
+      header = document.createElement('div');
+      header.className = 'tx-overlay-header';
+
+      // Add drag handle for large overlay
+      dragHandle = document.createElement('div');
+      dragHandle.className = 'tx-drag-handle';
+      dragHandle.title = 'Drag to move';
+      header.appendChild(dragHandle);
+
+      // Add window controls for large overlay
+      const windowControls = document.createElement('div');
+      windowControls.className = 'tx-window-controls';
+
+      const minimizeBtn = document.createElement('button');
+      minimizeBtn.type = 'button';
+      minimizeBtn.className = 'tx-window-control minimize';
+      minimizeBtn.innerHTML = '−';
+      minimizeBtn.title = 'Minimize';
+      minimizeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimize(overlay);
+      });
+
+      const maximizeBtn = document.createElement('button');
+      maximizeBtn.type = 'button';
+      maximizeBtn.className = 'tx-window-control maximize';
+      maximizeBtn.innerHTML = '□';
+      maximizeBtn.title = 'Maximize';
+      maximizeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimize(overlay);
+      });
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'tx-window-control close';
+      closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', () => this.dismissOverlay(article));
+
+      windowControls.appendChild(minimizeBtn);
+      windowControls.appendChild(maximizeBtn);
+      windowControls.appendChild(closeBtn);
+      header.appendChild(windowControls);
+    }
 
     const title = document.createElement('div');
-    title.className = 'tx-overlay-title';
-    title.innerHTML = `<strong>${mode === 'reply' ? 'Reply Draft' : 'Translation'}</strong><span>${this.getOverlaySubtitle(mode, {
+    title.className = isReply ? 'tx-compact-title' : 'tx-overlay-title';
+    title.innerHTML = `<strong>${mode === 'reply' ? 'X Reply Draft' : 'Translation'}</strong><span>${this.getOverlaySubtitle(mode, {
       toneId,
       languageCode,
       tweetLanguage
     })}</span>`;
 
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'tx-overlay-close';
-    close.textContent = '×';
-    close.addEventListener('click', () => this.dismissOverlay(article));
-
     header.appendChild(title);
-    header.appendChild(close);
 
     const output = document.createElement('div');
-    output.className = 'tx-output';
+    output.className = isReply ? 'tx-compact-output' : 'tx-output';
     const text = typeof content === 'string' ? content.trim() : '';
     const languageAttr = mode === 'reply' ? tweetLanguage || languageCode : languageCode;
     this.setNodeDirection(output, languageAttr, text);
     output.textContent = text || this.getEmptyMessage(mode);
 
     card.appendChild(header);
-    card.appendChild(output);
+
+    // Add content section
+    if (isReply) {
+      // Compact popup: content area
+      const contentArea = document.createElement('div');
+      contentArea.className = 'tx-compact-content';
+      contentArea.appendChild(output);
+      card.appendChild(contentArea);
+
+      // Compact popup: actions section with copy button
+      const actions = document.createElement('div');
+      actions.className = 'tx-compact-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'tx-compact-copy-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.disabled = !text;
+
+      copyBtn.addEventListener('click', async () => {
+        if (text) {
+          try {
+            await navigator.clipboard.writeText(text);
+            this.toast('Reply', 'Copied to clipboard.');
+          } catch (error) {
+            console.warn('[Xtension] Clipboard copy failed', error);
+            this.toast('Reply', 'Clipboard unavailable — check permissions.');
+          }
+        }
+      });
+
+      actions.appendChild(copyBtn);
+      card.appendChild(actions);
+    } else {
+      // Large overlay: add output and resize handle
+      card.appendChild(output);
+
+      resizeHandle = document.createElement('div');
+      resizeHandle.className = 'tx-resize-handle';
+      resizeHandle.title = 'Drag to resize';
+      card.appendChild(resizeHandle);
+    }
+
     wrapper.appendChild(card);
 
     const overlay = {
@@ -919,9 +1068,18 @@ class TXTimelineController {
       hoverCounter: 0,
       dismissTimer: null,
       leaveTimer: null,
-      cleanupLifecycle: null
+      cleanupLifecycle: null,
+      dragHandle: isReply ? null : dragHandle,
+      resizeHandle: isReply ? null : resizeHandle
     };
 
+    // Setup drag and resize functionality only for large overlay (translation)
+    if (!isReply) {
+      this.setupDrag(overlay, dragHandle);
+      this.setupResize(overlay, resizeHandle);
+    }
+
+    // Add reply composer only for translation mode (large overlay)
     if (mode === 'translate') {
       overlay.replyComposer = this.attachReplyComposer({
         overlay,
@@ -979,6 +1137,12 @@ class TXTimelineController {
     if (overlay.replyComposer?.cleanup) {
       overlay.replyComposer.cleanup();
     }
+    if (overlay.dragCleanup) {
+      overlay.dragCleanup();
+    }
+    if (overlay.resizeCleanup) {
+      overlay.resizeCleanup();
+    }
     clearTimeout(overlay.dismissTimer);
     clearTimeout(overlay.leaveTimer);
 
@@ -1009,6 +1173,29 @@ class TXTimelineController {
     };
     overlay.wrapper.addEventListener('transitionend', handleTransitionEnd, { once: true });
     setTimeout(finalize, 380);
+  }
+
+  toggleMinimize(overlay) {
+    if (!overlay || !overlay.card) return;
+
+    const isMinimized = overlay.card.classList.contains('tx-minimized');
+
+    if (isMinimized) {
+      // Maximize: Show full overlay
+      overlay.card.classList.remove('tx-minimized');
+      overlay.card.style.height = '490px';
+
+      // Reposition overlay after maximizing to ensure it's properly positioned
+      if (overlay.button && document.body.contains(overlay.button)) {
+        setTimeout(() => {
+          this.repositionOverlay(overlay, overlay.button);
+        }, 50); // Small delay to allow CSS transition
+      }
+    } else {
+      // Minimize: Show only output
+      overlay.card.classList.add('tx-minimized');
+      overlay.card.style.height = 'auto';
+    }
   }
 
   dismissAllOverlays(exceptArticle = null) {
@@ -1079,6 +1266,215 @@ class TXTimelineController {
     }
   }
 
+  setupDrag(overlay, dragHandle) {
+    const { wrapper } = overlay;
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    const startDrag = (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = wrapper.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    };
+
+    const drag = (e) => {
+      if (!isDragging) return;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+
+      // Keep within viewport
+      const popupWidth = wrapper.offsetWidth;
+      const popupHeight = wrapper.offsetHeight;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      newLeft = Math.max(0, Math.min(newLeft, viewportWidth - popupWidth));
+      newTop = Math.max(0, Math.min(newTop, viewportHeight - popupHeight));
+
+      wrapper.style.left = `${newLeft}px`;
+      wrapper.style.top = `${newTop}px`;
+    };
+
+    const endDrag = () => {
+      isDragging = false;
+      document.body.style.userSelect = '';
+    };
+
+    dragHandle.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', endDrag);
+
+    // Cleanup function
+    overlay.dragCleanup = () => {
+      dragHandle.removeEventListener('mousedown', startDrag);
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', endDrag);
+    };
+  }
+
+  setupResize(overlay, resizeHandle) {
+    const { card } = overlay;
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight;
+
+    const startResize = (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      startWidth = card.offsetWidth;
+      startHeight = card.offsetHeight;
+
+      card.classList.add('tx-resizing');
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const resize = (e) => {
+      if (!isResizing) return;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      let newWidth = startWidth + deltaX;
+      let newHeight = startHeight + deltaY;
+
+      // Apply constraints
+      const minWidth = 300;
+      const minHeight = 200;
+      const maxWidth = window.innerWidth - 40;
+      const maxHeight = window.innerHeight - 40;
+
+      newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+      newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
+
+      card.style.width = `${newWidth}px`;
+      card.style.height = `${newHeight}px`;
+
+      // Smart content management based on size
+      this.manageContentVisibility(overlay, newWidth, newHeight);
+    };
+
+    const endResize = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      card.classList.remove('tx-resizing');
+      document.body.style.userSelect = '';
+    };
+
+    resizeHandle.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', endResize);
+
+    // Cleanup function
+    overlay.resizeCleanup = () => {
+      resizeHandle.removeEventListener('mousedown', startResize);
+      document.removeEventListener('mousemove', resize);
+      document.removeEventListener('mouseup', endResize);
+    };
+  }
+
+  toggleMinimize(overlay) {
+    const { card } = overlay;
+    const isMinimized = card.classList.contains('tx-minimized');
+
+    if (isMinimized) {
+      // Restore to previous size
+      card.classList.remove('tx-minimized');
+      if (overlay.previousSize) {
+        card.style.width = overlay.previousSize.width;
+        card.style.height = overlay.previousSize.height;
+      }
+      this.showContent(overlay);
+    } else {
+      // Store current size and minimize
+      overlay.previousSize = {
+        width: card.style.width || '',
+        height: card.style.height || ''
+      };
+
+      // Calculate optimal height based on content
+      const optimalHeight = this.calculateOptimalHeight(overlay);
+
+      // Set minimized size (just enough for translation section with proper height)
+      card.style.width = '360px';
+      card.style.height = `${optimalHeight}px`;
+      card.classList.add('tx-minimized');
+      this.hideContent(overlay);
+    }
+  }
+
+  manageContentVisibility(overlay, width, height) {
+    const { card } = overlay;
+    const thresholdHeight = 300; // Minimum height to show reply composer
+
+    if (height < thresholdHeight) {
+      this.hideContent(overlay);
+      card.classList.add('tx-smart-compact');
+    } else {
+      this.showContent(overlay);
+      card.classList.remove('tx-smart-compact');
+    }
+  }
+
+  hideContent(overlay) {
+    if (overlay.replyComposer) {
+      overlay.replyComposer.classList.add('tx-hidden');
+    }
+  }
+
+  showContent(overlay) {
+    if (overlay.replyComposer) {
+      overlay.replyComposer.classList.remove('tx-hidden');
+    }
+  }
+
+  calculateOptimalHeight(overlay) {
+    const header = overlay.card.querySelector('.tx-overlay-header');
+    const output = overlay.output;
+    const resizeHandle = overlay.card.querySelector('.tx-resize-handle');
+
+    let totalHeight = 0;
+
+    // Header height
+    if (header) {
+      totalHeight += header.offsetHeight + 16; // Add margin
+    }
+
+    // Output content height
+    if (output) {
+      // Temporarily show full content to measure it
+      const originalHeight = output.style.height;
+      output.style.height = 'auto';
+      const contentHeight = output.scrollHeight;
+      output.style.height = originalHeight;
+
+      totalHeight += Math.max(contentHeight + 32, 120); // Min 120px for output + padding
+    }
+
+    // Resize handle space
+    if (resizeHandle) {
+      totalHeight += 30;
+    }
+
+    // Add some padding
+    totalHeight += 20;
+
+    return Math.min(Math.max(totalHeight, 180), Math.min(window.innerHeight - 100, 400));
+  }
+
   attachReplyComposer({ overlay, container, targetLanguage, sourceLanguage, context, originalLanguage }) {
     const normalizedOriginal = (originalLanguage || '').toLowerCase();
     const normalizedTarget = (targetLanguage || '').toLowerCase();
@@ -1093,7 +1489,7 @@ class TXTimelineController {
 
     const composer = document.createElement('div');
     composer.className = 'tx-reply-composer';
-    const toastLabel = context === 'discord' ? 'Discord Translate' : 'TXtension';
+    const toastLabel = 'Xtension';
 
     const header = document.createElement('div');
     header.className = 'tx-reply-composer-header';
@@ -1111,6 +1507,13 @@ class TXTimelineController {
     input.className = 'tx-reply-input';
     input.rows = 4;
     input.placeholder = 'Write your reply in your language…';
+
+    // Ensure consistent sizing across platforms
+    input.style.minHeight = '72px';
+    input.style.fontSize = '13px';
+    input.style.lineHeight = '1.5';
+    input.style.padding = '10px 12px';
+    input.style.borderRadius = '12px';
 
     const languageSelectWrapper = document.createElement('label');
     languageSelectWrapper.className = 'tx-reply-language-select-wrapper';
@@ -1233,7 +1636,7 @@ class TXTimelineController {
         await navigator.clipboard.writeText(text);
         this.toast(toastLabel, 'Copied to clipboard.');
       } catch (error) {
-        console.warn('[TXtension] Clipboard copy failed', error);
+        console.warn('[Xtension] Clipboard copy failed', error);
         this.toast(toastLabel, 'Clipboard unavailable — check permissions.');
       }
     };
@@ -1268,7 +1671,7 @@ class TXTimelineController {
     if (!composer || composer.translating) return;
 
     const draft = composer.input.value.trim();
-    const toastLabel = composer.context === 'discord' ? 'Discord Translate' : 'TXtension';
+    const toastLabel = composer.context === 'discord' ? 'Discord Translate' : 'Xtension';
     if (!draft) {
       this.toast(toastLabel, 'Write your reply before translating.');
       return;
@@ -1284,7 +1687,7 @@ class TXTimelineController {
     try {
       const effectiveLanguage = composer.targetLanguage || composer.defaultLanguage;
 
-      const response = await chrome.runtime.sendMessage({
+      const response = await safeRuntimeSendMessage({
         type: 'translateReplyDraft',
         text: draft,
         targetLanguage: effectiveLanguage,
@@ -1309,7 +1712,7 @@ class TXTimelineController {
       composer.copyButton.dataset.clipboard = translated;
       composer.copyButton.disabled = false;
     } catch (error) {
-      console.error('[TXtension] Reply draft translation failed', error);
+      console.error('[Xtension] Reply draft translation failed', error);
       composer.output.textContent = error?.message || 'Unable to translate that reply right now.';
       composer.output.classList.remove('placeholder');
       this.setNodeDirection(composer.output, composer.targetLanguage || composer.defaultLanguage, composer.output.textContent);
@@ -1345,7 +1748,7 @@ class TXTimelineController {
   }
 
   getModeLabel(mode) {
-    return mode === 'reply' ? 'RXtension' : 'TXtension';
+    return mode === 'reply' ? 'Xtension' : 'Xtension';
   }
 
   getOverlaySubtitle(mode, { toneId, languageCode, tweetLanguage }) {
@@ -1526,7 +1929,7 @@ class DiscordReplyController {
         this.settings = deepMerge(clone(this.config.defaultSettings), saved);
       }
     } catch (error) {
-      console.warn('[TXtension] Failed to load settings, using defaults', error);
+      console.warn('[Xtension] Failed to load settings, using defaults', error);
       this.settings = clone(this.config.defaultSettings);
     }
   }
@@ -1931,7 +2334,7 @@ class DiscordReplyController {
   async handleReplyClick(message, button) {
     const discordSettings = this.settings.discordReply || {};
     if (!discordSettings.prompt?.trim()) {
-      this.toast('Discord Reply', 'Please first specify the prompt in the settings.');
+      this.toast('Reply', 'Please first specify the prompt in the settings.');
       return;
     }
 
@@ -1945,7 +2348,7 @@ class DiscordReplyController {
 
     const messageContent = this.extractMessage(message);
     if (!messageContent.text) {
-      this.toast('Discord Reply', 'No message content detected.');
+      this.toast('Reply', 'No message content detected.');
       return;
     }
     if (!messageContent.language) {
@@ -1955,10 +2358,10 @@ class DiscordReplyController {
     this.dismissAllOverlays(message);
     this.clearButtonReset(button);
     this.setButtonState(button, 'loading');
-    this.toast('Discord Reply', 'Drafting reply…');
+    this.toast('Reply', 'Drafting reply…');
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await safeRuntimeSendMessage({
         type: 'generateDiscordReply',
         messageContent
       });
@@ -1988,15 +2391,15 @@ class DiscordReplyController {
       if (discordSettings.autoCopy && cleanedContent) {
         try {
           await navigator.clipboard.writeText(cleanedContent);
-          this.toast('Discord Reply', 'Copied to clipboard.');
+          this.toast('Reply', 'Copied to clipboard.');
         } catch (copyError) {
-          console.warn('[TXtension] Clipboard copy failed', copyError);
-          this.toast('Discord Reply', 'Clipboard unavailable — check permissions.');
+          console.warn('[Xtension] Clipboard copy failed', copyError);
+          this.toast('Reply', 'Clipboard unavailable — check permissions.');
         }
       }
     } catch (error) {
-      console.error('[TXtension] Discord reply failed', error);
-      this.toast('Discord Reply', error?.message || 'Unable to generate a reply right now.');
+      console.error('[Xtension] Discord reply failed', error);
+      this.toast('Reply', error?.message || 'Unable to generate a reply right now.');
       this.setButtonState(button, 'error');
       this.scheduleButtonReset(button);
     }
@@ -2005,7 +2408,7 @@ class DiscordReplyController {
   async handleTranslateClick(message, button) {
     const messageContent = this.extractMessage(message);
     if (!messageContent.text) {
-      this.toast('Discord Translate', 'No message content detected.');
+      this.toast('Translation', 'No message content detected.');
       return;
     }
     if (!messageContent.language) {
@@ -2026,10 +2429,10 @@ class DiscordReplyController {
     this.dismissAllOverlays(message);
     this.clearButtonReset(button);
     this.setButtonState(button, 'loading');
-    this.toast('Discord Translate', 'Translating message…');
+    this.toast('Translation', 'Translating message…');
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await safeRuntimeSendMessage({
         type: 'translateDiscordMessage',
         messageContent,
         targetLanguage,
@@ -2063,23 +2466,26 @@ class DiscordReplyController {
       if (this.settings.autoCopy && cleanedContent) {
         try {
           await navigator.clipboard.writeText(cleanedContent);
-          this.toast('Discord Translate', 'Copied to clipboard.');
+          this.toast('Translation', 'Copied to clipboard.');
         } catch (copyError) {
-          console.warn('[TXtension] Clipboard copy failed', copyError);
-          this.toast('Discord Translate', 'Clipboard unavailable — check permissions.');
+          console.warn('[Xtension] Clipboard copy failed', copyError);
+          this.toast('Translation', 'Clipboard unavailable — check permissions.');
         }
       }
     } catch (error) {
-      console.error('[TXtension] Discord translate failed', error);
-      this.toast('Discord Translate', error?.message || 'Unable to translate right now.');
+      console.error('[Xtension] Discord translate failed', error);
+      this.toast('Translation', error?.message || 'Unable to translate right now.');
       this.setButtonState(button, 'error');
       this.scheduleButtonReset(button);
     }
   }
 
   buildOverlay({ mode = 'reply', message, button, content, languageCode, toneId, messageLanguage }) {
+    // Check if this is a reply generation (compact popup) or translation (large overlay)
+    const isReply = mode === 'reply';
+
     const wrapper = document.createElement('div');
-    wrapper.className = 'tx-overlay';
+    wrapper.className = isReply ? 'tx-compact-popup' : 'tx-overlay';
     wrapper.dataset.txtensionOverlay = 'true';
 
     const theme = this.resolvePopupTheme();
@@ -2090,41 +2496,149 @@ class DiscordReplyController {
       wrapper.style.setProperty('--tx-popup-text', theme.text);
       wrapper.style.setProperty('--tx-popup-subtext', theme.subtext);
       wrapper.style.setProperty('--tx-popup-shadow', theme.shadow);
+      wrapper.style.setProperty('--tx-popup-backdrop', theme.backdrop || 'blur(20px)');
+      wrapper.style.setProperty('--tx-popup-glow', theme.glow || 'transparent');
+      // Enhanced theme properties
+      // Special case: use sky blue header for light theme
+      if (theme.id === 'light') {
+        wrapper.style.setProperty('--tx-popup-header-bg', 'linear-gradient(135deg, #87CEEB 0%, #B0E0E6 50%, #87CEFA 100%)');
+      } else {
+        wrapper.style.setProperty('--tx-popup-header-bg', theme.headerBg || theme.background);
+      }
+      wrapper.style.setProperty('--tx-popup-accent-color', theme.accentColor || '#3b82f6');
+      wrapper.style.setProperty('--tx-popup-focus-glow', theme.focusGlow || '0 0 0 3px rgba(59, 130, 246, 0.2)');
+      wrapper.style.setProperty('--tx-popup-button-bg', '#7c3aed');
+      wrapper.style.setProperty('--tx-popup-button-hover', '#6d28d9');
     }
     if (fontStack) {
       wrapper.style.setProperty('--tx-popup-font', fontStack);
     }
 
     const card = document.createElement('div');
-    card.className = 'tx-overlay-card';
+    card.className = isReply ? 'tx-compact-card' : 'tx-overlay-card';
 
-    const header = document.createElement('div');
-    header.className = 'tx-overlay-header';
+    // Declare variables in broader scope to be accessible later
+    let dragHandle, resizeHandle;
+
+    let header;
+    if (isReply) {
+      // Compact header for reply generation
+      header = document.createElement('div');
+      header.className = 'tx-compact-header';
+
+      // Add close button for compact popup
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'tx-compact-close';
+      closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', () => this.dismissOverlay(message));
+      header.appendChild(closeBtn);
+    } else {
+      // Large header for translation
+      header = document.createElement('div');
+      header.className = 'tx-overlay-header';
+
+      // Add drag handle for large overlay
+      dragHandle = document.createElement('div');
+      dragHandle.className = 'tx-drag-handle';
+      dragHandle.title = 'Drag to move';
+      header.appendChild(dragHandle);
+
+      // Add window controls for large overlay
+      const windowControls = document.createElement('div');
+      windowControls.className = 'tx-window-controls';
+
+      const minimizeBtn = document.createElement('button');
+      minimizeBtn.type = 'button';
+      minimizeBtn.className = 'tx-window-control minimize';
+      minimizeBtn.innerHTML = '−';
+      minimizeBtn.title = 'Minimize';
+      minimizeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimize(overlay);
+      });
+
+      const maximizeBtn = document.createElement('button');
+      maximizeBtn.type = 'button';
+      maximizeBtn.className = 'tx-window-control maximize';
+      maximizeBtn.innerHTML = '□';
+      maximizeBtn.title = 'Maximize';
+      maximizeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimize(overlay);
+      });
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'tx-window-control close';
+      closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', () => this.dismissOverlay(message));
+
+      windowControls.appendChild(minimizeBtn);
+      windowControls.appendChild(maximizeBtn);
+      windowControls.appendChild(closeBtn);
+      header.appendChild(windowControls);
+    }
 
     const title = document.createElement('div');
-    title.className = 'tx-overlay-title';
-    const heading = mode === 'reply' ? 'Discord Reply' : 'Discord Translation';
+    title.className = isReply ? 'tx-compact-title' : 'tx-overlay-title';
+    const heading = mode === 'reply' ? 'X Reply Draft' : 'Translation';
     const subtitle = mode === 'reply' ? this.getSubtitle(languageCode) : `${this.getToneLabel(toneId)} · ${this.getLanguageLabel(languageCode)}`;
     title.innerHTML = `<strong>${heading}</strong><span>${subtitle}</span>`;
 
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'tx-overlay-close';
-    close.textContent = '×';
-    close.addEventListener('click', () => this.dismissOverlay(message));
-
     header.appendChild(title);
-    header.appendChild(close);
 
     const output = document.createElement('div');
-    output.className = 'tx-output';
+    output.className = isReply ? 'tx-compact-output' : 'tx-output';
     const text = typeof content === 'string' ? content.trim() : '';
-    const languageAttr = languageCode || '';
+    const languageAttr = mode === 'reply' ? messageLanguage || languageCode : languageCode;
     this.setNodeDirection(output, languageAttr, text);
-    output.textContent = text || (mode === 'reply' ? 'No reply generated yet.' : 'No translation returned.');
+    output.textContent = text || this.getEmptyMessage(mode);
 
     card.appendChild(header);
-    card.appendChild(output);
+
+    // Add content section
+    if (isReply) {
+      // Compact popup: content area
+      const contentArea = document.createElement('div');
+      contentArea.className = 'tx-compact-content';
+      contentArea.appendChild(output);
+      card.appendChild(contentArea);
+
+      // Compact popup: actions section with copy button
+      const actions = document.createElement('div');
+      actions.className = 'tx-compact-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'tx-compact-copy-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.disabled = !text;
+
+      copyBtn.addEventListener('click', async () => {
+        if (text) {
+          try {
+            await navigator.clipboard.writeText(text);
+            this.toast('Reply', 'Copied to clipboard.');
+          } catch (error) {
+            console.warn('[Xtension] Clipboard copy failed', error);
+            this.toast('Reply', 'Clipboard unavailable — check permissions.');
+          }
+        }
+      });
+
+      actions.appendChild(copyBtn);
+      card.appendChild(actions);
+    } else {
+      // Large overlay: add output and resize handle
+      card.appendChild(output);
+
+      resizeHandle = document.createElement('div');
+      resizeHandle.className = 'tx-resize-handle';
+      resizeHandle.title = 'Drag to resize';
+      card.appendChild(resizeHandle);
+    }
+
     wrapper.appendChild(card);
 
     const overlay = {
@@ -2138,8 +2652,16 @@ class DiscordReplyController {
       hoverCounter: 0,
       dismissTimer: null,
       leaveTimer: null,
-      cleanupLifecycle: null
+      cleanupLifecycle: null,
+      dragHandle: isReply ? null : dragHandle,
+      resizeHandle: isReply ? null : resizeHandle
     };
+
+    // Setup drag and resize functionality only for large overlay (translation)
+    if (!isReply) {
+      this.setupDrag(overlay, dragHandle);
+      this.setupResize(overlay, resizeHandle);
+    }
 
     if (mode === 'translate') {
       overlay.replyComposer = this.attachReplyComposer({
@@ -2212,7 +2734,7 @@ class DiscordReplyController {
 
     const composer = document.createElement('div');
     composer.className = 'tx-reply-composer';
-    const toastLabel = context === 'discord' ? 'Discord Translate' : 'TXtension';
+    const toastLabel = 'Xtension';
 
     const header = document.createElement('div');
     header.className = 'tx-reply-composer-header';
@@ -2230,6 +2752,13 @@ class DiscordReplyController {
     input.className = 'tx-reply-input';
     input.rows = 4;
     input.placeholder = 'Write your reply in your language…';
+
+    // Ensure consistent sizing across platforms
+    input.style.minHeight = '72px';
+    input.style.fontSize = '13px';
+    input.style.lineHeight = '1.5';
+    input.style.padding = '10px 12px';
+    input.style.borderRadius = '12px';
 
     const languageSelectWrapper = document.createElement('label');
     languageSelectWrapper.className = 'tx-reply-language-select-wrapper';
@@ -2352,7 +2881,7 @@ class DiscordReplyController {
         await navigator.clipboard.writeText(text);
         this.toast(toastLabel, 'Copied to clipboard.');
       } catch (error) {
-        console.warn('[TXtension] Clipboard copy failed', error);
+        console.warn('[Xtension] Clipboard copy failed', error);
         this.toast(toastLabel, 'Clipboard unavailable — check permissions.');
       }
     };
@@ -2388,7 +2917,7 @@ class DiscordReplyController {
 
     const draft = composer.input.value.trim();
     if (!draft) {
-      this.toast('Discord Translate', 'Write your reply before translating.');
+      this.toast('Translation', 'Write your reply before translating.');
       return;
     }
 
@@ -2403,7 +2932,7 @@ class DiscordReplyController {
       const effectiveLanguage = composer.targetLanguage || composer.defaultLanguage;
       composer.targetLanguage = effectiveLanguage;
       this.setNodeDirection(composer.input, composer.inputLanguage || composer.defaultLanguage, composer.input.value);
-      const response = await chrome.runtime.sendMessage({
+      const response = await safeRuntimeSendMessage({
         type: 'translateReplyDraft',
         text: draft,
         targetLanguage: effectiveLanguage,
@@ -2426,14 +2955,14 @@ class DiscordReplyController {
       composer.copyButton.dataset.clipboard = translated;
       composer.copyButton.disabled = false;
     } catch (error) {
-      console.error('[TXtension] Discord draft translation failed', error);
+      console.error('[Xtension] Discord draft translation failed', error);
       composer.output.textContent = error?.message || 'Unable to translate that reply right now.';
       composer.output.classList.remove('placeholder');
       this.setNodeDirection(composer.output, composer.targetLanguage || composer.defaultLanguage, composer.output.textContent);
       this.setNodeDirection(composer.input, composer.inputLanguage || composer.defaultLanguage, composer.input.value);
       composer.copyButton.disabled = true;
       delete composer.copyButton.dataset.clipboard;
-      this.toast('Discord Translate', error?.message || 'Unable to translate that reply right now.');
+      this.toast('Translation', error?.message || 'Unable to translate that reply right now.');
     } finally {
       composer.translateButton.textContent = originalLabel;
       composer.translateButton.disabled = false;
@@ -2451,6 +2980,12 @@ class DiscordReplyController {
     }
     if (overlay.replyComposer?.cleanup) {
       overlay.replyComposer.cleanup();
+    }
+    if (overlay.dragCleanup) {
+      overlay.dragCleanup();
+    }
+    if (overlay.resizeCleanup) {
+      overlay.resizeCleanup();
     }
     clearTimeout(overlay.dismissTimer);
     clearTimeout(overlay.leaveTimer);
@@ -2482,6 +3017,29 @@ class DiscordReplyController {
     };
     overlay.wrapper.addEventListener('transitionend', handleTransitionEnd, { once: true });
     setTimeout(finalize, 380);
+  }
+
+  toggleMinimize(overlay) {
+    if (!overlay || !overlay.card) return;
+
+    const isMinimized = overlay.card.classList.contains('tx-minimized');
+
+    if (isMinimized) {
+      // Maximize: Show full overlay
+      overlay.card.classList.remove('tx-minimized');
+      overlay.card.style.height = '490px';
+
+      // Reposition overlay after maximizing to ensure it's properly positioned
+      if (overlay.button && document.body.contains(overlay.button)) {
+        setTimeout(() => {
+          this.repositionOverlay(overlay, overlay.button);
+        }, 50); // Small delay to allow CSS transition
+      }
+    } else {
+      // Minimize: Show only output
+      overlay.card.classList.add('tx-minimized');
+      overlay.card.style.height = 'auto';
+    }
   }
 
   dismissAllOverlays(exceptMessage = null) {
@@ -2603,6 +3161,10 @@ class DiscordReplyController {
     this.buttonTimers.set(button, timer);
   }
 
+  getEmptyMessage(mode) {
+    return mode === 'reply' ? 'No reply generated yet.' : 'No translation returned.';
+  }
+
   extractMessage(message) {
     const segments = [];
     message.querySelectorAll('[id^="message-content"]').forEach((node) => {
@@ -2681,7 +3243,7 @@ class DiscordReplyController {
     if (languageCode && this.rtlLanguages.has(languageCode.toLowerCase())) {
       return true;
     }
-    const rtlPattern = /[\\u0591-\\u07FF\\uFB1D-\\uFDFD\\uFE70-\\uFEFC]/;
+    const rtlPattern = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
     return rtlPattern.test(sampleText);
   }
 
@@ -2690,6 +3252,216 @@ class DiscordReplyController {
     window.addEventListener('resize', this.boundReposition, { passive: true });
     window.addEventListener('scroll', this.boundReposition, { passive: true });
     this.listenersBound = true;
+  }
+
+  setupDrag(overlay, dragHandle) {
+    console.log('[Xtension Discord] Setting up drag functionality', dragHandle);
+    const { wrapper } = overlay;
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    const startDrag = (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = wrapper.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    };
+
+    const drag = (e) => {
+      if (!isDragging) return;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+
+      // Keep within viewport
+      const popupWidth = wrapper.offsetWidth;
+      const popupHeight = wrapper.offsetHeight;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      newLeft = Math.max(0, Math.min(newLeft, viewportWidth - popupWidth));
+      newTop = Math.max(0, Math.min(newTop, viewportHeight - popupHeight));
+
+      wrapper.style.left = `${newLeft}px`;
+      wrapper.style.top = `${newTop}px`;
+    };
+
+    const endDrag = () => {
+      isDragging = false;
+      document.body.style.userSelect = '';
+    };
+
+    dragHandle.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', endDrag);
+
+    // Cleanup function
+    overlay.dragCleanup = () => {
+      dragHandle.removeEventListener('mousedown', startDrag);
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', endDrag);
+    };
+  }
+
+  setupResize(overlay, resizeHandle) {
+    const { card } = overlay;
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight;
+
+    const startResize = (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      startWidth = card.offsetWidth;
+      startHeight = card.offsetHeight;
+
+      card.classList.add('tx-resizing');
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const resize = (e) => {
+      if (!isResizing) return;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      let newWidth = startWidth + deltaX;
+      let newHeight = startHeight + deltaY;
+
+      // Apply constraints
+      const minWidth = 300;
+      const minHeight = 200;
+      const maxWidth = window.innerWidth - 40;
+      const maxHeight = window.innerHeight - 40;
+
+      newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+      newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
+
+      card.style.width = `${newWidth}px`;
+      card.style.height = `${newHeight}px`;
+
+      // Smart content management based on size
+      this.manageContentVisibility(overlay, newWidth, newHeight);
+    };
+
+    const endResize = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      card.classList.remove('tx-resizing');
+      document.body.style.userSelect = '';
+    };
+
+    resizeHandle.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', endResize);
+
+    // Cleanup function
+    overlay.resizeCleanup = () => {
+      resizeHandle.removeEventListener('mousedown', startResize);
+      document.removeEventListener('mousemove', resize);
+      document.removeEventListener('mouseup', endResize);
+    };
+  }
+
+  toggleMinimize(overlay) {
+    const { card } = overlay;
+    const isMinimized = card.classList.contains('tx-minimized');
+
+    if (isMinimized) {
+      // Restore to previous size
+      card.classList.remove('tx-minimized');
+      if (overlay.previousSize) {
+        card.style.width = overlay.previousSize.width;
+        card.style.height = overlay.previousSize.height;
+      }
+      this.showContent(overlay);
+    } else {
+      // Store current size and minimize
+      overlay.previousSize = {
+        width: card.style.width || '',
+        height: card.style.height || ''
+      };
+
+      // Calculate optimal height based on content
+      const optimalHeight = this.calculateOptimalHeight(overlay);
+
+      // Set minimized size (just enough for translation section with proper height)
+      card.style.width = '360px';
+      card.style.height = `${optimalHeight}px`;
+      card.classList.add('tx-minimized');
+      this.hideContent(overlay);
+    }
+  }
+
+  manageContentVisibility(overlay, width, height) {
+    const { card } = overlay;
+    const thresholdHeight = 300; // Minimum height to show reply composer
+
+    if (height < thresholdHeight) {
+      this.hideContent(overlay);
+      card.classList.add('tx-smart-compact');
+    } else {
+      this.showContent(overlay);
+      card.classList.remove('tx-smart-compact');
+    }
+  }
+
+  hideContent(overlay) {
+    if (overlay.replyComposer) {
+      overlay.replyComposer.classList.add('tx-hidden');
+    }
+  }
+
+  showContent(overlay) {
+    if (overlay.replyComposer) {
+      overlay.replyComposer.classList.remove('tx-hidden');
+    }
+  }
+
+  calculateOptimalHeight(overlay) {
+    const header = overlay.card.querySelector('.tx-overlay-header');
+    const output = overlay.output;
+    const resizeHandle = overlay.card.querySelector('.tx-resize-handle');
+
+    let totalHeight = 0;
+
+    // Header height
+    if (header) {
+      totalHeight += header.offsetHeight + 16; // Add margin
+    }
+
+    // Output content height
+    if (output) {
+      // Temporarily show full content to measure it
+      const originalHeight = output.style.height;
+      output.style.height = 'auto';
+      const contentHeight = output.scrollHeight;
+      output.style.height = originalHeight;
+
+      totalHeight += Math.max(contentHeight + 32, 120); // Min 120px for output + padding
+    }
+
+    // Resize handle space
+    if (resizeHandle) {
+      totalHeight += 30;
+    }
+
+    // Add some padding
+    totalHeight += 20;
+
+    return Math.min(Math.max(totalHeight, 180), Math.min(window.innerHeight - 100, 400));
   }
 
   toast(title, message) {

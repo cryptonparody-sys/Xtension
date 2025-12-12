@@ -22,5 +22,5 @@ Outgoing requests target only the AI endpoints you configure (OpenAI, Anthropic,
 ## Your Controls
 
 - Remove or rotate API keys any time from the **Integrations** tab.
-- Clear all preferences by deleting the extension or removing `chrome.storage.local` data for TXtension.
+- Clear all preferences by deleting the extension or removing `chrome.storage.local` data for Xtension.
 - Review provider-specific privacy policies to understand how they handle submitted content.

@@ -1,8 +1,5 @@
 # 🛡️ TXtension Privacy Policy
 
-*Last updated: January 6, 2026*
-
----
 
 ## Our Commitment
 
@@ -27,11 +24,3 @@ Outgoing requests target only the AI endpoints you configure (OpenAI, Anthropic,
 - Remove or rotate API keys any time from the **Integrations** tab.
 - Clear all preferences by deleting the extension or removing `chrome.storage.local` data for TXtension.
 - Review provider-specific privacy policies to understand how they handle submitted content.
-
-## Contact
-
-Questions or feedback? Fork the project and manage issues within your own distribution.
-
----
-
-Using TXtension gives you instant translations while keeping ownership of your data. Thanks for building with it.
